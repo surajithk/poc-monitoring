@@ -1,28 +1,26 @@
-# Hello Application example
+Steps to deploy and test:
 
-[![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://ssh.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https://github.com/GoogleCloudPlatform/kubernetes-engine-samples&cloudshell_tutorial=README.md&cloudshell_workspace=hello-app)
+export PROJECT_ID=nyt-messaging-dev
 
-This example shows how to build and deploy a containerized Go web server
-application using [Kubernetes](https://kubernetes.io).
+docker build -t gcr.io/${PROJECT_ID}/monitoring-poc:v1 .
 
-Visit https://cloud.google.com/kubernetes-engine/docs/tutorials/hello-app
-to follow the tutorial and deploy this application on [Google Kubernetes
-Engine](https://cloud.google.com/kubernetes-engine).
+docker images
 
-This directory contains:
+docker run --rm -p 8080:8080 gcr.io/${PROJECT_ID}/monitoring-poc:v1
 
-- `main.go` contains the HTTP server implementation. It responds to all HTTP
-  requests with a  `Hello, world!` response.
-- `Dockerfile` is used to build the Docker image for the application.
+gcloud auth configure-docker
 
-This application is available as two Docker images, which respond to requests
-with different version numbers:
+docker push gcr.io/${PROJECT_ID}/monitoring-poc:v1
 
-- `gcr.io/google-samples/hello-app:1.0`
-- `gcr.io/google-samples/hello-app:2.0`
+kubectl create deployment monitoring-poc --image=gcr.io/${PROJECT_ID}/monitoring-poc:v1
 
-This example is used in many official/unofficial tutorials, some of them
-include:
-- [Kubernetes Engine Quickstart](https://cloud.google.com/kubernetes-engine/docs/quickstart)
-- [Kubernetes Engine - Deploying a containerized web application](https://cloud.google.com/kubernetes-engine/docs/tutorials/hello-app) tutorial
-- [Kubernetes Engine - Setting up HTTP Load Balancing](https://cloud.google.com/kubernetes-engine/docs/tutorials/http-balancer) tutorial
+kubectl scale deployment monitoring-poc --replicas=3
+
+kubectl autoscale deployment monitoring-poc --cpu-percent=80 --min=1 --max=5
+
+kubectl get pods
+
+kubectl expose deployment monitoring-poc --name=monitoring-poc-service --type=LoadBalancer --port 80 --target-port 8080
+
+kubectl get service
+
