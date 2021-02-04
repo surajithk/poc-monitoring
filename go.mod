@@ -1,4 +1,4 @@
-module poc-monitoring
+module github.com/nytimes/messaging-monitoring-poc
 
 go 1.14
 
