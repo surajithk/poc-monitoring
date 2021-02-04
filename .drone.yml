@@ -1,0 +1,94 @@
+---
+kind: pipeline
+name: default
+
+platform:
+  os: linux
+  arch: amd64
+
+workspace:
+  path: /drone/src/github.com/nytm/messaging-monitoring-poc
+
+steps:
+  - name: go-mods
+    pull: if-not-exists
+    image: golang:1.14-alpine
+    environment:
+      GOPROXY: https://go-proxy-exp.dev.nyt.net
+      GO111MODULE: on
+      GOPRIVATE: "\"github.com/nytm/*,github.com/nytimes/*\""
+    commands:
+      - go mod vendor
+      - rm go.mod go.sum
+    when:
+      event:
+        - tag
+        - push
+        - pull_request
+
+#  - name: build-monitoring-poc
+#    pull: if-not-exists
+#    image: nytimes/golang-gcloud-sdk:1.14
+#    environment:
+#      GOPATH: /drone
+#      GO111MODULE: off
+#      PATH: /bin:/usr/bin:/usr/local/go/bin
+#    commands:
+#      - docker build -t gcr.io/${PROJECT_ID}/messaging-monitoring-poc:v1 .
+#    when:
+#      event:
+#        - tag
+#        - push
+
+  - name: publish-monitoring-poc
+    pull: if-not-exists
+    image: plugins/gcr
+    settings:
+      registry: gcr.io
+      repo: nyt-messaging-dev/messaging-monitoring-poc
+      tag: ${DRONE_COMMIT}
+      dockerfile: cmd/server/Dockerfile
+    environment:
+      GOOGLE_CREDENTIALS:
+        from_secret: google_credentials_dev
+    when:
+      event:
+        - tag
+        - push
+
+  ############################
+  # Deploy to DEV ENVIRONMENT
+  ############################
+  - name: deploy-dev
+    pull: if-not-exists
+    # Documentation: https://github.com/NYTimes/drone-gke/blob/master/DOCS.md.
+    image: nytimes/drone-gke:k8s-1.11
+    settings:
+      template: cmd/server/manifests/monitoring-poc.kube.yml
+      verbose: true
+      region: us-east1
+      cluster: nyt-mercury-dev
+      namespace: helix
+
+      # These variables are made available in the .kube.yml template.
+      vars:
+        image: "gcr.io/nyt-messaging-dev/messaging-monitoring-poc:${DRONE_COMMIT}"
+        app: webhooks
+        env: dev
+        container_request_mem: "256Mi"
+        container_limit_mem: "500Mi"
+        container_request_cpu: "100m"
+        container_limit_cpu: "200m"
+        target_cpu_utilization_percent: 80
+        port: 8080
+        replicas: 1
+        replicas_min: 1
+        replicas_max: 2
+        google_cloud_project: "nyt-messaging-dev"
+    environment:
+      TOKEN:
+        from_secret: google_credentials_dev
+    when:
+      event:
+        - push
+...

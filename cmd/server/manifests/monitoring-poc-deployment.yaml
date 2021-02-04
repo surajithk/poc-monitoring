@@ -1,0 +1,30 @@
+# [START container_helloapp_deployment]
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: monitoring-poc
+  labels:
+    app: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: monitoring
+      tier: web
+  template:
+    metadata:
+      labels:
+        app: monitoring
+        tier: web
+    spec:
+      containers:
+      - name: monitoring-poc
+        image: gcr.io/nyt-messaging-dev/monitoring-poc:1.0
+        ports:
+        - containerPort: 8080
+        env:
+        - name: DD_AGENT_HOST
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        - name: DD_ENV
+          value: "dev"

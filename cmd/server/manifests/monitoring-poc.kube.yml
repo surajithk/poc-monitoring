@@ -1,0 +1,118 @@
+# NOTE: this file is parsed as a golang template by the drone-gke plugin.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: helix
+
+---
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: monitoring-poc
+  namespace: helix
+  labels:
+    app: monitoring-poc
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: monitoring-poc
+  template:
+    metadata:
+      labels:
+        app: monitoring-poc
+        env: dev
+    spec:
+      volumes:
+        - name: google-application-sa-credentials
+          secret:
+            secretName: google-service-account-credentials
+      containers:
+        - name: application
+          image: {{ .image }}
+          ports:
+          - containerPort: 8080
+          volumeMounts:
+            - name: google-application-sa-credentials
+              mountPath: /var/secrets/google
+          resources:
+            limits:
+              memory: {{ .container_limit_mem }}
+              cpu: {{ .container_limit_cpu }}
+            requests:
+              memory: {{ .container_request_mem }}
+              cpu: {{ .container_request_cpu }}
+#          readinessProbe:
+#            httpGet:
+#              path: /healthz
+#              port: 8080
+#              scheme: HTTP
+#            initialDelaySeconds: 30
+#            timeoutSeconds: 5
+#          livenessProbe:
+#            httpGet:
+#              path: /healthz
+#              port: 8080
+#              scheme: HTTP
+#            initialDelaySeconds: 10
+#            periodSeconds: 5
+          # Quote all environment variable values
+          env:
+            - name: ENV
+              value: {{ .env }}
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /var/secrets/google/key.json
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: DD_AGENT_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: DD_ENV
+              value: "dev"
+      nodeSelector:
+        scaling: "off"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .app }} # TODO this will not work for workspaces. a single service should be used for all the *webhook pods
+  namespace: helix
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+spec:
+  type: NodePort
+  selector:
+    app: {{ .app }} # TODO this will not work for workspaces. a single service should be used for all the *webhook pods
+    env: {{.env}}
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: "http2"
+
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{.app}} # do not apply webhooks-prefix since we are assigning a static IP to this ingress
+  namespace: helix
+  annotations:
+    # Disable port 80 access (set at initial creation; otherwise no effect) rules
+    kubernetes.io/ingress.allow-http: "false"
+    kubernetes.io/ingress.global-static-ip-name: "gke-webhooks-dev" # 34.107.249.244
+    ingress.gcp.kubernetes.io/pre-shared-cert: "star-dev-nyt-net-exp20220514" # Name of the TLS certificate in GCP
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /sp-events
+            backend:
+              serviceName: {{.app}} # do not apply webhooks-prefix since we are assigning a static IP to this ingress
+              servicePort: 8080

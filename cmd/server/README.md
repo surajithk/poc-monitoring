@@ -14,7 +14,7 @@ docker push gcr.io/${PROJECT_ID}/monitoring-poc:v1
 
 kubectl create deployment monitoring-poc --image=gcr.io/${PROJECT_ID}/monitoring-poc:v1
 
-kubectl scale deployment monitoring-poc --replicas=3
+kubectl scale deployment monitoring-poc --replicas=1
 
 kubectl autoscale deployment monitoring-poc --cpu-percent=80 --min=1 --max=5
 
